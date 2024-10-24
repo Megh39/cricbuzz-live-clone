@@ -2,128 +2,77 @@ const cheerio = require('cheerio');
 const axios = require('axios');
 
 const { InternalServer } = require('../core/response/errorResponse');
-const CRICBUZZ_URL = "https://www.cricbuzz.com"
-
+const CRICBUZZ_URL = "https://www.cricbuzz.com";
 const fetchScore = async (matchId) => {
     try {
         const response = await axios.get(`${CRICBUZZ_URL}/live-cricket-scores/${matchId}`);
         const $ = cheerio.load(response.data);
 
+        // General match details
         const update = $('.cb-col.cb-col-100.cb-min-stts.cb-text-complete').text().trim() || 'Match Stats will Update Soon';
-        const process = $('.cb-text-inprogress').text().trim() || 'Match Stats will Update Soon';
-        const noresult = $('.cb-col.cb-col-100.cb-font-18.cb-toss-sts.cb-text-abandon').text().trim() || 'Match Stats will Update Soon';
-        const stumps = $('.cb-text-stumps').text().trim() || 'Match Stats will Update Soon';
-        const lunch = $('.cb-text-lunch').text().trim() || 'Match Stats will Update Soon';
-        const inningsbreak = $('.cb-text-inningsbreak').text().trim() || 'Match Stats will Update Soon';
-        const tea = $('.cb-text-tea').text().trim() || 'Match Stats will Update Soon';
-        const rain_break = $('.cb-text-rain').text().trim() || 'Match Stats will Update Soon';
-        const wet_outfield = $('.cb-text-wetoutfield').text().trim() || 'Match Stats will Update Soon';
+        const liveScore = $('.cb-font-20.text-bold').text().trim() || 'N/A';
 
+        // Run rate extraction (fixed to select the second span)
+        const runRate = $('span.cb-font-12.cb-text-gray').find('span').last().text().trim() || 'N/A';
+
+        // Batsmen details (fixed selector)
+        const batsmen = [];
+        $('div[ng-if="match.miniscore.batsman.length > 0"] .cb-min-itm-rw.ng-scope').each((i, elem) => {
+            const batsmanName = $(elem).find('a.cb-text-link').text().trim();
+            const runs = $(elem).find('div[ng-bind="batsmen.batRuns"]').text().trim();
+            const balls = $(elem).find('div[ng-bind="batsmen.batBalls"]').text().trim();
+            const fours = $(elem).find('div[ng-bind="batsmen.batFours"]').text().trim();
+            const sixes = $(elem).find('div[ng-bind="batsmen.batSixes"]').text().trim();
+            const strikeRate = $(elem).find('div[ng-bind="batsmen.batStrikeRate|number: 2"]').text().trim();
+
+            batsmen.push({
+                name: batsmanName,
+                runs: runs || '0',
+                balls: balls || '0',
+                fours: fours || '0',
+                sixes: sixes || '0',
+                strikeRate: strikeRate || '0.00',
+            });
+        });
+
+
+        const bowlers = [];
+        $('.cb-col.cb-col-100.cb-min-itm-rw').each((i, elem) => {
+            const bowlerName = $(elem).find('.cb-col.cb-col-50 a').text().trim();
+            const overs = $(elem).find('.cb-col.cb-col-10.text-right').eq(0).text().trim();
+            const maidens = $(elem).find('.cb-col.cb-col-8.text-right').eq(0).text().trim();
+            const runs = $(elem).find('.cb-col.cb-col-10.text-right').eq(1).text().trim();
+            const wickets = $(elem).find('.cb-col.cb-col-8.text-right').eq(1).text().trim();
+            const economy = $(elem).find('.cb-col.cb-col-14.text-right').text().trim();
+        
+            if (bowlerName) {
+                bowlers.push({
+                    name: bowlerName,
+                    overs: overs || '0',
+                    maidens: maidens || '0',
+                    runs: runs || '0',
+                    wickets: wickets || '0',
+                    economy: economy || '0.00',
+                });
+            } else {
+                console.error('Bowler not found at index:', i); // Log the index if bowler is not found
+            }
+        });
+        // Return structure with all data
         return {
-            'title': $('.cb-nav-hdr.cb-font-18.line-ht24').text().trim().replace(', Commentary', ''),
-            'update': update !== 'Match Stats will Update Soon' ? update : process || noresult || stumps || lunch || inningsbreak || tea || rain_break || wet_outfield || 'Match Stats will Update Soon...',
-            'liveScore': $('.cb-font-20.text-bold').text().trim(),
-            'runRate': $('.cb-font-12.cb-text-gray').first().text().trim().replace('CRR:\u00a0', ''),
-            'batsmanOne': $('.cb-col.cb-col-50').eq(1).text().trim(),
-            'batsmanOneRun': $('.cb-col.cb-col-10.ab.text-right').eq(0).text().trim(),
-            'batsmanOneBall': '(' + $('.cb-col.cb-col-10.ab.text-right').eq(1).text().trim() + ')',
-            'batsmanOneSR': $('.cb-col.cb-col-14.ab.text-right').eq(0).text().trim(),
-            'batsmanTwo': $('.cb-col.cb-col-50').eq(2).text().trim(),
-            'batsmanTwoRun': $('.cb-col.cb-col-10.ab.text-right').eq(2).text().trim(),
-            'batsmanTwoBall': '(' + $('.cb-col.cb-col-10.ab.text-right').eq(3).text().trim() + ')',
-            'batsmanTwoSR': $('.cb-col.cb-col-14.ab.text-right').eq(1).text().trim(),
-            'bowlerOne': $('.cb-col.cb-col-50').eq(4).text().trim(),
-            'bowlerOneOver': $('.cb-col.cb-col-10.text-right').eq(4).text().trim(),
-            'bowlerOneRun': $('.cb-col.cb-col-10.text-right').eq(5).text().trim(),
-            'bowlerOneWickets': $('.cb-col.cb-col-8.text-right').eq(5).text().trim(),
-            'bowlerOneEconomy': $('.cb-col.cb-col-14.text-right').eq(2).text().trim(),
-            'bowlerTwo': $('.cb-col.cb-col-50').eq(5).text().trim(),
-            'bowlerTwoOver': $('.cb-col.cb-col-10.text-right').eq(6).text().trim(),
-            'bowlerTwoRun': $('.cb-col.cb-col-10.text-right').eq(7).text().trim(),
-            'bowlerTwoWicket': $('.cb-col.cb-col-8.text-right').eq(7).text().trim(),
-            'bowlerTwoEconomy': $('.cb-col.cb-col-14.text-right').eq(3).text().trim(),
-        }
+            title: $('.cb-nav-hdr.cb-font-18.line-ht24').text().trim().replace(', Commentary', ''),
+            update: update,
+            liveScore: liveScore,
+            runRate: runRate,
+            batsmen: batsmen, // Array of batsman objects
+            bowlers: bowlers, // Array of bowler objects
+        };
     } catch (e) {
-        throw new InternalServer("Something went wrong")
+        console.error('Error fetching score:', e); // More detailed error logging
+        throw new InternalServer("Something went wrong");
     }
-}
+};
 
-
-// const fetchMatches = async (endpoint, origin = "international") => {
-//     try {
-
-//         const URL = `${CRICBUZZ_URL}/cricket-match/${endpoint}`
-
-//         const response = await axios.get(URL);
-//         const $ = cheerio.load(response.data, { xmlMode: true });
-
-//         const matches = [];
-
-//         // Iterate through each match element of the active match type
-//         $(`.cb-plyr-tbody[ng-show="active_match_type == '${origin}-tab'"] .cb-col-100.cb-col`).each((index, matchElement) => {
-//             // Extract match details
-//             const titleElement = $(matchElement).find('.cb-lv-scr-mtch-hdr a');
-//             const title = titleElement.text().trim();
-
-//             // Check if titleElement has an href attribute
-//             const hrefAttribute = titleElement.attr('href');
-//             const matchId = hrefAttribute ? hrefAttribute.match(/\/(\d+)\//)[1] : null; // Extracting match ID from href if available
-
-
-//             const teams = [];
-//             $(matchElement).find('.cb-ovr-flo.cb-hmscg-tm-nm').each((i, teamElement) => {
-//                 const teamName = $(teamElement).text().trim();
-//                 const run = $(matchElement).find('.cb-ovr-flo').filter(':not(.cb-hmscg-tm-nm)').eq(i).text().trim();
-//                 const senitizeRun = run.split(teamName).join("")
-
-//                 const teamObject = {
-//                     team: teamName,
-//                     run: senitizeRun,
-//                 };
-
-//                 teams.push(teamObject);
-//             });
-
-//             const timeAndPlaceElement = $(matchElement).find('div.text-gray');
-//             const date = timeAndPlaceElement.find('span').eq(0).text().trim();
-//             const time = timeAndPlaceElement.find('span').eq(2).text().trim();
-//             const place = timeAndPlaceElement.find('span.text-gray').text().trim();
-
-//             const overViewIfLive = $(matchElement).find(".cb-text-live").text().trim();
-//             const overViewIfComplete = $(matchElement).find(".cb-text-complete").text().trim();
-
-//             // Create an object for the match
-//             const matchObject = {
-//                 id: matchId,
-//                 title,
-//                 teams,
-//                 timeAndPlace: {
-//                     date,
-//                     time,
-//                     place,
-//                 },
-//                 overview: overViewIfLive || overViewIfComplete
-//             };
-
-
-
-//             // Categorize matches based on type
-//             if (matchId && title.length) {
-//                 const matchIdExist = matches.filter(match => match.id === matchId);
-//                 if (!matchIdExist.length) {
-//                     matches.push(matchObject)
-//                 }
-//             }
-//         });
-
-
-//         return {
-//             matches
-//         }
-//     } catch (error) {
-//         throw new InternalServer(error.message)
-//     }
-// }
 
 const fetchMatches = async () => {
     try {
@@ -132,31 +81,66 @@ const fetchMatches = async () => {
 
         const matches = [];
 
-        // Targeting the main container that holds all match info
         $('.cb-col-100.cb-col.cb-tms-itm').each((index, matchElement) => {
             const titleElement = $(matchElement).find('.cb-lv-scr-mtch-hdr a');
             const matchTitle = titleElement.text().trim();
-
-            const matchLink = titleElement.attr('href'); // Link to the match page
-            const matchType = $(matchElement).find('.text-gray').first().text().trim(); // e.g. "2nd ODI"
-
-            // Extracting team scores and result
+            // const matchLink = titleElement.attr('href');
+            const matchType = $(matchElement).find('.text-gray').first().text().trim();
+            const matchLink = $(matchElement).find('.cb-lv-scr-mtch-hdr a');
+            
+            const href = matchLink.attr('href');
+            const matchIdMatch = href.match(/\/live-cricket-scores\/(\d+)\//);
+            const matchId = matchIdMatch ? matchIdMatch[1] : null;
             const team1 = $(matchElement).find('.cb-hmscg-bwl-txt .cb-hmscg-tm-nm').first().text().trim();
             const score1 = $(matchElement).find('.cb-hmscg-bwl-txt div[style*="inline-block"]').first().text().trim();
-
             const team2 = $(matchElement).find('.cb-hmscg-bat-txt .cb-hmscg-tm-nm').first().text().trim();
             const score2 = $(matchElement).find('.cb-hmscg-bat-txt div[style*="inline-block"]').first().text().trim();
 
-            const result = $(matchElement).find('.cb-text-complete').text().trim();
+            const status = $(matchElement).find('.cb-text-live, .cb-text-complete, .cb-text-abandon').text().trim() || 'Not Available';
+            // Finding the date element
+            const dateElement = $(matchElement).find('.text-gray');
+            const dateText = dateElement.text().trim();
+            console.log('Date Text:', dateText);
+
+            let dateTime = '';
+
+            if (dateText.includes("Today")) {
+                const parts = dateText.split('Today');
+                if (parts.length > 0) {
+                    // matchType = parts[0].trim(); // e.g., "1st Test"
+                    dateTime = "Today"; // Or extract a proper date if available
+                }
+            }
+
+            // console.log('Match Type:', matchType);
+            console.log('Extracted dateTime:', dateTime);
+
+
+            // Get the venue text directly and extract the venue name
+            // Get the venue text directly
+            const venueText = dateElement.find('.text-gray').text().trim(); // Get the venue text directly
+
+            // Use a regular expression to match the last occurrence of " at " and get the text after it
+            const venueMatch = venueText.match(/at\s+(.*)/); // Capture everything after "at "
+
+            const venue = venueMatch && venueMatch[1] ? venueMatch[1].trim() : ''; // Get the captured group or default to an empty string
+
+
+            // Constructing the final dateTime string
+            // const dateTime = `${startDate} - ${endDate} ${time}`;
 
             if (matchTitle && team1 && team2) {
                 matches.push({
+                    matchId,
                     matchTitle,
                     matchType,
-                    matchLink: `https://www.cricbuzz.com${matchLink}`,
+                    // matchLink: `https://www.cricbuzz.com${matchLink}`,
                     team1: `${team1} ${score1}`,
                     team2: `${team2} ${score2}`,
-                    result
+                    result: $(matchElement).find('.cb-text-complete').text().trim(),
+                    status,
+                    dateTime,
+                    venue // Now only contains the venue name
                 });
             }
         });
@@ -165,12 +149,11 @@ const fetchMatches = async () => {
         return matches;
     } catch (error) {
         console.error('Error fetching matches:', error);
+        throw new InternalServer("Something went wrong");
     }
 };
-
-
 
 module.exports = {
     fetchScore,
     fetchMatches
-}
+};
