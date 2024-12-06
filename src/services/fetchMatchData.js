@@ -91,7 +91,7 @@ const fetchMatches = async (endpoint, type) => {
         // $('.cb-col-100.cb-col.cb-tms-itm').each((index, matchElement) => {
         // $(`.cb-plyr-tbody[ng-show="(active_match_type == '${activeTab}')"] .cb-col-100.cb-col`).each((index, matchElement) => {
         // $(`.cb-col.cb-col-100[ng-show*='${activeTab}'] .cb-col-100.cb-col.cb-tms-itm`).each((_, matchElement) => {
-            $(`.cb-col.cb-col-100.cb-plyr-tbody[ng-show*="${activeTab}"] .cb-mtch-lst`).each((_, matchElement) => {
+        $(`.cb-col.cb-col-100.cb-plyr-tbody[ng-show*="${activeTab}"] .cb-mtch-lst`).each((_, matchElement) => {
 
             const titleElement = $(matchElement).find('.cb-lv-scr-mtch-hdr a');
             const matchTitle = titleElement.text().trim();
@@ -170,8 +170,74 @@ const fetchMatches = async (endpoint, type) => {
         throw new InternalServer("Something went wrong");
     }
 };
+const fetchUpcomingMatches = async (endpoint, type) => {
+    try {
+        console.log(`Fetching upcoming matches for type: ${type} and endpoint: ${endpoint}`);
+        
+        // Fetch the HTML page
+        const { data } = await axios.get(`${CRICBUZZ_URL}/cricket-match/${endpoint}`);
+        const $ = cheerio.load(data);
+
+        const matches = [];
+        
+        // Map the match type to the appropriate tab
+        const tabTypeMap = {
+            all: 'all-tab',
+            international: 'international-tab',
+            league: 'league-tab',
+            domestic: 'domestic-tab',
+            women: 'women-tab',
+        };
+        
+        const activeTab = tabTypeMap[type.toLowerCase()] || 'all-tab';
+        console.log(`Using active tab: ${activeTab}`);
+
+        // Scrape matches for the given active tab
+        $(`.cb-col.cb-col-100.cb-plyr-tbody[ng-show*="${activeTab}"] .cb-mtch-lst`).each((_, matchElement) => {
+            // Match title
+            const titleElement = $(matchElement).find('.cb-lv-scr-mtch-hdr a');
+            const matchTitle = titleElement.text().trim();
+
+            // Match type (e.g., "1st Match")
+            const matchType = $(matchElement).find('.text-gray').first().text().trim();
+
+            // Match link and ID
+            const matchLink = titleElement.attr('href');
+            const matchIdMatch = matchLink.match(/\/live-cricket-scores\/(\d+)\//);
+            const matchId = matchIdMatch ? matchIdMatch[1] : null;
+
+            // Date and time
+            const dateElement = $(matchElement).find('.text-gray');
+            const dateText = dateElement.text().trim();
+            let dateTime = '';
+
+            if (dateText.includes("Today")) {
+                dateTime = "Today";
+            }
+            const venueText = dateElement.find('span.text-gray').last().text().trim();
+            const venueMatch = venueText.match(/at\s+(.*)/);
+            const venue = venueMatch && venueMatch[1] ? venueMatch[1].trim() : 'Unknown Venue';
+            // Add to matches array
+            matches.push({
+                matchId,
+                matchTitle,
+                matchType,
+                dateTime,
+                venue,
+            });
+        });
+
+        console.log(`Upcoming matches fetched: ${matches.length} matches found`);
+        return matches;
+    } catch (error) {
+        console.error('Error fetching upcoming matches:', error);
+        throw new InternalServer("Something went wrong while fetching upcoming matches");
+    }
+};
 
 module.exports = {
     fetchScore,
-    fetchMatches
+    fetchMatches,
+    fetchUpcomingMatches,
+
 };
